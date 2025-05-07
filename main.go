@@ -48,11 +48,20 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	msgs := make(chan models.Update)
+	msgs := make(chan models.Message)
 
 	handler := func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		log.Printf("g received: ChatID: %d, MSG: %s", update.Message.Chat.ID, update.Message.Text)
-		msgs <- *update
+		log.Printf("g received: %v", update)
+
+		if update.Message != nil {
+			msgs <- *update.Message
+			return
+		}
+
+		if update.ChannelPost != nil {
+			msgs <- *update.ChannelPost
+			return
+		}
 	}
 
 	masterBot := botOrFail("TELEGRAM_BOT_TOKEN", []bot.Option{
@@ -66,14 +75,16 @@ func main() {
 	}
 
 	go func() {
-		for update := range msgs {
+		for msg := range msgs {
+			log.Printf("g received: ChatID: %d, MSG: %s", msg.Chat.ID, msg.Text)
+
 			for i := range reactionBots {
 				b := &reactionBots[i]
 				isBig := rand.Intn(2) == 1
 
 				ok, error := b.SetMessageReaction(ctx, &bot.SetMessageReactionParams{
-					ChatID:    update.Message.Chat.ID,
-					MessageID: update.Message.ID,
+					ChatID:    msg.Chat.ID,
+					MessageID: msg.ID,
 					Reaction: []models.ReactionType{{
 						Type: models.ReactionTypeTypeEmoji,
 						ReactionTypeEmoji: &models.ReactionTypeEmoji{
